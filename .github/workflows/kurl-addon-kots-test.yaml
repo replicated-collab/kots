@@ -1,0 +1,55 @@
+name: kurl-addon-test
+
+on:
+  workflow_dispatch:
+    inputs:
+      addon_version:
+        type: string
+        description: "Kots version (without the 'v')."
+        required: true
+      priority:
+        type: number
+        description: 'Testgrid run priority.'
+        default: 0
+  workflow_call:
+    inputs:
+      addon_version:
+        type: string
+        description: "Kots version (without the 'v')."
+        required: true
+      s3_prefix:
+        type: string
+        description: "S3 key prefix."
+        default: "test/"
+      priority:
+        type: number
+        description: 'Testgrid run priority.'
+        default: 0
+    outputs:
+      addon_package_url:
+        description: "S3 package url"
+        value: ${{ jobs.test-kots-addon.outputs.addon_package_url }}
+
+jobs:
+  test-kots-addon:
+    runs-on: ubuntu-20.04
+    outputs:
+      addon_package_url: ${{ steps.addon-generate.outputs.addon_package_url }}
+    steps:
+      - uses: actions/checkout@v3
+      - id: addon-generate
+        uses: ./.github/actions/kurl-addon-kots-generate
+        with:
+          addon_version: "${{ inputs.addon_version }}"
+          s3_prefix: "${{ github.event.action == 'workflow_dispatch' && 'test/' || inputs.s3_prefix }}"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.KURL_ADDONS_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.KURL_ADDONS_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+      - uses: ./.github/actions/kurl-addon-kots-test
+        id: addon-test
+        with:
+          addon_version: "${{ inputs.addon_version }}"
+          addon_package_url: ${{ steps.addon-generate.outputs.addon_package_url }}
+          priority: "${{ inputs.priority }}"
+          testgrid_api_token: "${{ secrets.TESTGRID_PROD_API_TOKEN }}"
